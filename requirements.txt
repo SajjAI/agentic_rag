@@ -10,7 +10,8 @@ openai>=1.12.0
 # AI/ML dependencies
 # crewai>=0.11.0
 crewai==0.108.0 
-crewai-tools==0.108.0
+# crewai-tools==0.108.0
+crewai-tools==0.38.1
 
 langchain>=0.1.0
 langchain-core>=0.1.0
@@ -29,7 +30,8 @@ sentence-transformers>=2.2.2
 # Optional: For PDF processing (if needed)
 # Core dependencies
 # ChromaDB and its dependencies with specific versions
-chromadb==0.4.18  # Try an earlier stable version
+# chromadb==0.4.18  # Try an earlier stable version
+chromadb>=0.5.23
 onnxruntime==1.16.3
 
 # Additional dependencies that might be needed
