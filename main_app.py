@@ -20,6 +20,11 @@ from langchain.chains import LLMChain
 from langchain.schema import Generation
 import re
 
+
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 # Load environment variables
 load_dotenv()
 
