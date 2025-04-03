@@ -8,7 +8,8 @@ import requests
 from langchain.llms.base import BaseLLM
 from langchain.callbacks.base import BaseCallbackHandler
 import re
-
+import tempfile
+import gc
 from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import BaseChatPromptTemplate
@@ -40,6 +41,13 @@ if "retriever_agent" not in st.session_state:
 
 if "synthesizer_agent" not in st.session_state:
     st.session_state.synthesizer_agent = None
+
+if "pdf_files" not in st.session_state:
+    st.session_state.pdf_files = []
+    
+def reset_chat():
+    st.session_state.messages = []
+    gc.collect()
 
 # Add after existing imports
 class DeepseekLLM(BaseLLM):
@@ -386,6 +394,46 @@ def main():
             st.session_state.messages = []
             st.rerun()
 
+        
+        st.header("Add Your PDF Documents")
+        uploaded_files = st.file_uploader("Choose PDF files", type=["pdf"], accept_multiple_files=True)
+        st.session_state.pdf_tool = DocumentSearchTool()
+        
+        if uploaded_files:
+            # Create PDF tool if not exists
+            if st.session_state.pdf_tool is None:
+                with st.spinner("Setting up document search..."):
+                    st.success("Search system initialized!")
+
+            # Process new files
+            for uploaded_file in uploaded_files:
+                # Check if file was already processed
+                if uploaded_file.name not in [f["name"] for f in st.session_state.pdf_files]:
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        temp_file_path = os.path.join(temp_dir, uploaded_file.name)
+                        with open(temp_file_path, "wb") as f:
+                            f.write(uploaded_file.getvalue())
+                        
+                        with st.spinner(f"Indexing {uploaded_file.name}... Please wait..."):
+                            try:
+                                process_id = st.session_state.pdf_tool.upload_document(temp_file_path)
+                                st.session_state.pdf_files.append({
+                                    "name": uploaded_file.name,
+                                    "process_id": process_id
+                                })
+                                st.success(f"{uploaded_file.name} indexed!")
+                            except Exception as e:
+                                st.error(f"Error indexing {uploaded_file.name}: {str(e)}")
+
+            # Display summary of indexed documents
+            if st.session_state.pdf_files:
+                st.write("📚 Indexed Documents:")
+                for pdf_file in st.session_state.pdf_files:
+                    st.write(f"- {pdf_file['name']}")
+
+        if st.button("Clear Chat"):
+            reset_chat()
+            st.session_state.pdf_files = []  # Also clear the PDF files list
     # ===========================
     #   Main Chat Interface
     # ===========================

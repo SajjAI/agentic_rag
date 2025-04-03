@@ -19,6 +19,10 @@ from pydantic import Field
 from langchain.chains import LLMChain
 from langchain.schema import Generation
 import re
+from app_deepseek_agentic_langchain import main as langchain_main
+from app_deep_seek_agentic_crewai import main as crewai_main
+from groundx_deepseek_search import main as groundx_main
+from groundx_openai_search import main as groundx_openai_main
 
 
 __import__('pysqlite3')
@@ -28,29 +32,30 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 # Load environment variables
 load_dotenv()
 
-# Initialize session states
+# Initialize session state variables
+if "current_implementation" not in st.session_state:
+    st.session_state.current_implementation = "langchain"
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 if "selected_llm" not in st.session_state:
     st.session_state.selected_llm = "gpt-4"
 
-if "implementation" not in st.session_state:
-    st.session_state.implementation = None
+if "retriever_agent" not in st.session_state:
+    st.session_state.retriever_agent = None
 
-if "show_main_menu" not in st.session_state:
-    st.session_state.show_main_menu = True
+if "synthesizer_agent" not in st.session_state:
+    st.session_state.synthesizer_agent = None
 
-if "current_chat" not in st.session_state:
-    st.session_state.current_chat = None
+if "pdf_files" not in st.session_state:
+    st.session_state.pdf_files = []
 
-# Import implementations
-import groundx_openai_search
-import groundx_deepseek_search
-import app_deep_seek_agentic_crewai
-import app_deepseek_agentic_langchain
+if "pdf_tool" not in st.session_state:
+    st.session_state.pdf_tool = None
 
-
+if "crew" not in st.session_state:
+    st.session_state.crew = None
 
 def render_header():
     """Render the app header with navigation"""
@@ -69,54 +74,52 @@ def render_header():
 def main():
     render_header()
     
-    if st.session_state.current_chat is None:
-        st.write("Select a chat interface to begin:")
-        
-        chat_options = {
-            "OpenAI Search": "groundx_openai_search",
-            "Deepseek Search": "groundx_deepseek_search",
-            "Agentic CrewAI": "app_deep_seek_agentic_crewai",
-            "Agentic LangChain": "app_deepseek_agentic_langchain"
-        }
-        
-        selected_chat = st.selectbox(
-            "Choose Chat Interface",
-            options=list(chat_options.keys()),
-            format_func=lambda x: x,
-            index=None,
-            placeholder="Select a chat interface..."
+    st.title("Agentic RAG with Multiple Implementations")
+    
+    # Sidebar for implementation selection
+    with st.sidebar:
+        st.header("Select Implementation")
+        implementation = st.selectbox(
+            "Choose Implementation",
+            ["langchain", "crewai", "groundx_deepseek", "groundx_openai"],
+            index=["langchain", "crewai", "groundx_deepseek", "groundx_openai"].index(st.session_state.current_implementation)
         )
         
-        if selected_chat:
-            st.session_state.current_chat = chat_options[selected_chat]
+        if implementation != st.session_state.current_implementation:
+            st.session_state.current_implementation = implementation
+            # Reset relevant session state variables when switching implementations
+            if "messages" in st.session_state:
+                del st.session_state.messages
+            if "retriever_agent" in st.session_state:
+                del st.session_state.retriever_agent
+            if "synthesizer_agent" in st.session_state:
+                del st.session_state.synthesizer_agent
+            if "pdf_files" in st.session_state:
+                del st.session_state.pdf_files
+            if "pdf_tool" in st.session_state:
+                del st.session_state.pdf_tool
+            if "crew" in st.session_state:
+                del st.session_state.crew
             st.rerun()
-            
-    else:
-        try:
-            # Import and run the selected chat interface
-            if st.session_state.current_chat == "groundx_openai_search":
-                import groundx_openai_search
-                groundx_openai_search.main()
-            
-            elif st.session_state.current_chat == "groundx_deepseek_search":
-                import groundx_deepseek_search
-                groundx_deepseek_search.main()
-            
-            elif st.session_state.current_chat == "app_deep_seek_agentic_crewai":
-                import app_deep_seek_agentic_crewai
-                app_deep_seek_agentic_crewai.main()
-            
-            elif st.session_state.current_chat == "app_deepseek_agentic_langchain":
-                import app_deepseek_agentic_langchain
-                app_deepseek_agentic_langchain.main()
-                
-        except Exception as e:
-            st.error(f"Error loading chat interface: {str(e)}")
-            st.error("Please make sure all required dependencies are installed and environment variables are set.")
-            
-            if st.button("Return to Menu"):
-                st.session_state.current_chat = None
-                st.rerun()
+
+        # Add back button
+        if st.button("← Back to Selection"):
+            st.session_state.current_implementation = "langchain"
+            st.rerun()
+
+    # Main content area
+    try:
+        if implementation == "langchain":
+            langchain_main()
+        elif implementation == "crewai":
+            crewai_main()
+        elif implementation == "groundx_deepseek":
+            groundx_main()
+        elif implementation == "groundx_openai":
+            groundx_openai_main()
+    except Exception as e:
+        st.error(f"Error loading chat interface: {str(e)}")
+        st.info("Please make sure all required dependencies are installed and environment variables are set.")
 
 if __name__ == "__main__":
     main() 
