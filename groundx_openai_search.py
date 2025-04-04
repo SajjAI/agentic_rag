@@ -30,6 +30,11 @@ def main():
     # Initialize clients
     groundx, client = init_clients()
     st.title("GroundX OpenAI Search")
+    
+    # Initialize session state for messages if not exists
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    
     # Search configuration
     with st.sidebar:
         st.header("Configuration")
@@ -80,10 +85,51 @@ def main():
             reset_chat()
             st.session_state.pdf_files = []  # Also clear the PDF files list
 
+    # Display chat history
+    st.subheader("Chat History")
+    
+    # Create a container for the chat history
+    chat_container = st.container()
+    
+    with chat_container:
+        for i, message in enumerate(st.session_state.messages):
+            # Display user message
+            if message["role"] == "user":
+                with st.chat_message("user"):
+                    st.markdown(message["content"])
+            
+            # Display assistant message
+            elif message["role"] == "assistant":
+                with st.chat_message("assistant"):
+                    # Display the answer
+                    st.markdown(message["content"])
+                    
+                    # Display metadata in expanders
+                    if "metadata" in message:
+                        # Show search results
+                        with st.expander("View Search Results"):
+                            st.text(message["metadata"]["search_results"])
+                        
+                        # Show reasoning process
+                        if "reasoning" in message["metadata"]:
+                            with st.expander("View Reasoning Process"):
+                                st.markdown(message["metadata"]["reasoning"])
+                        
+                        # Show search score
+                        if "search_score" in message["metadata"]:
+                            st.caption(f"Search Score: {message['metadata']['search_score']:.2f}")
+
     # Main search interface
     query = st.chat_input("Enter your search query:")
 
     if query:
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": query})
+        
+        # Display user message immediately
+        with st.chat_message("user"):
+            st.markdown(query)
+        
         try:
             with st.spinner("Searching documents..."):
                 # Get content from GroundX
@@ -184,6 +230,9 @@ def main():
                         "search_score": results.score
                     }
                 })
+                
+                # Rerun to update the chat history display
+                st.rerun()
 
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
@@ -200,6 +249,7 @@ def main():
            - The reasoning process in an expandable section
            - A detailed answer based on the document contents
            - Search metadata and scores
+        5. Your chat history will be displayed above, with all questions and answers
         """)
 
 if __name__ == "__main__":
