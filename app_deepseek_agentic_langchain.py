@@ -168,7 +168,7 @@ class RetrieverPromptTemplate(BaseChatPromptTemplate):
         kwargs["tools"] = "\n".join([f"{tool.name}: {tool.description}" for tool in self.tools])
         
         messages = [
-            SystemMessage(content="You are an expert information retriever. Your ONLY task is to search through documents to find relevant information."),
+            SystemMessage(content="You are an expert information retriever. Your task is to search through documents to find relevant information. Think step by step about what information you need and how to find it."),
             HumanMessage(content=self.template.format(**kwargs))
         ]
         return messages
@@ -179,7 +179,7 @@ class SynthesizerPromptTemplate(BaseChatPromptTemplate):
     
     def format_messages(self, **kwargs) -> List[HumanMessage]:
         messages = [
-            SystemMessage(content="You are an expert information synthesizer. Your ONLY task is to create a response using EXACTLY the information provided, with NO additions or assumptions."),
+            SystemMessage(content="You are an expert information synthesizer. Your task is to create a response using EXACTLY the information provided. Think step by step about how to combine and present the information."),
             HumanMessage(content=self.template.format(**kwargs))
         ]
         return messages
@@ -236,7 +236,7 @@ class CustomAgentOutputParser(AgentOutputParser):
 def init_retriever_agent(tools: List[Tool], model_name: str) -> AgentExecutor:
     llm = get_llm(model_name, temperature=0.0)  # Lower temperature for retrieval
     
-    template = """You are an expert information retriever. Your ONLY task is to search through documents to find relevant information.
+    template = """You are an expert information retriever. Your task is to search through documents to find relevant information.
 
     AVAILABLE TOOLS:
     {tools}
@@ -244,12 +244,22 @@ def init_retriever_agent(tools: List[Tool], model_name: str) -> AgentExecutor:
     QUESTION: {input}
     
     STRICT FORMAT TO FOLLOW:
-    Thought: (identify key terms and concepts to search for)
+    Thought: (think step by step about what information you need and how to find it)
+    1. What are the key concepts in the question?
+    2. What specific information am I looking for?
+    3. What search terms would be most effective?
+    
     Action: document_search
     Action Input: (create a focused search query using key terms from the question)
     Observation: (wait for result)
-    Thought: (analyze if the search result is relevant; if not, try a different search approach)
+    
+    Thought: (analyze the search results step by step)
+    1. What relevant information was found?
+    2. Is this information sufficient?
+    3. Do I need to search with different terms?
+    
     (Repeat the above steps if needed, max 3 times)
+    
     Final Answer: (provide the relevant information found in the searches)
 
     CRITICAL RULES:
@@ -260,13 +270,6 @@ def init_retriever_agent(tools: List[Tool], model_name: str) -> AgentExecutor:
     5. If multiple searches are needed, combine all relevant information found
     6. Only say "No relevant information found" after trying at least 2 different search queries
     7. Include ALL relevant information found in the Final Answer
-
-    SEARCH TIPS:
-    - Break complex questions into smaller search queries
-    - Try both specific and general search terms
-    - Use exact phrases in quotes for precise matching
-    - Remove unnecessary words from search queries
-    - If a search fails, try synonyms or related terms
 
     CURRENT CONVERSATION:
     {agent_scratchpad}
@@ -298,12 +301,21 @@ def init_retriever_agent(tools: List[Tool], model_name: str) -> AgentExecutor:
 def init_synthesizer_agent(model_name: str) -> AgentExecutor:
     llm = get_llm(model_name, temperature=0.0)  # Lower temperature to reduce creativity
     
-    template = """You are an expert information synthesizer. Your ONLY task is to create a response using EXACTLY the information provided, with NO additions or assumptions.
+    template = """You are an expert information synthesizer. Your task is to create a response using EXACTLY the information provided.
 
     QUESTION: {question}
     
     RETRIEVED INFORMATION: {context}
     
+    STRICT FORMAT TO FOLLOW:
+    Thought: (think step by step about how to synthesize the information)
+    1. What are the main points from the retrieved information?
+    2. How do these points relate to the question?
+    3. What supporting details should I include?
+    4. How should I structure the response?
+    
+    Final Answer: (provide a well-structured response using ONLY the retrieved information)
+
     CRITICAL RULES:
     1. ONLY use information explicitly stated in the RETRIEVED INFORMATION
     2. DO NOT add any external knowledge or assumptions
@@ -311,10 +323,6 @@ def init_synthesizer_agent(model_name: str) -> AgentExecutor:
     4. If information is missing or unclear, explicitly say so
     5. Use exact quotes where possible
     6. If the retrieved information doesn't answer the question, say "The provided information does not answer this question. Please try asking the question differently."
-
-    STRICT FORMAT TO FOLLOW:
-    Thought: (analyze what information from the retrieval is relevant to the question)
-    Final Answer: (provide a response using ONLY the retrieved information, with NO external knowledge or assumptions)
 
     Begin your response now:"""
     
@@ -438,7 +446,7 @@ def main():
     #   Main Chat Interface
     # ===========================
     st.title("Agentic RAG with LangChain")
-    st.write("Ask questions and get AI-powered answers using a retriever-synthesizer agent system.")
+    st.write("Ask questions and get AI-powered answers using a retriever-synthesizer agent system with chain of thought reasoning.")
 
     # Initialize agents if needed
     if st.session_state.retriever_agent is None or st.session_state.synthesizer_agent is None:
@@ -460,6 +468,9 @@ def main():
             if "metadata" in message:
                 with st.expander("Search Results"):
                     st.text(message["metadata"]["search_results"])
+                if "thought_process" in message["metadata"]:
+                    with st.expander("Thought Process"):
+                        st.text(message["metadata"]["thought_process"])
 
     # Chat input
     query = st.chat_input("Ask a question about your documents...")
@@ -476,6 +487,8 @@ def main():
                 # Step 1: Retrieve relevant information
                 with st.spinner("Retrieving relevant information..."):
                     retrieval_result = st.session_state.retriever_agent.run(query)
+                    # Extract thought process from retrieval result
+                    thought_process = "\n".join([line for line in retrieval_result.split("\n") if line.startswith("Thought:")])
 
                 # Step 2: Synthesize the response
                 with st.spinner("Synthesizing response..."):
@@ -483,6 +496,9 @@ def main():
                         "question": query,
                         "context": retrieval_result
                     })
+                    # Extract thought process from synthesis
+                    synthesis_thoughts = "\n".join([line for line in final_response.split("\n") if line.startswith("Thought:")])
+                    thought_process += "\n\nSynthesis Thoughts:\n" + synthesis_thoughts
 
                 # Display response with streaming effect
                 message_placeholder = st.empty()
@@ -502,7 +518,8 @@ def main():
                     "role": "assistant",
                     "content": full_response,
                     "metadata": {
-                        "search_results": retrieval_result
+                        "search_results": retrieval_result,
+                        "thought_process": thought_process
                     }
                 })
 
@@ -517,9 +534,9 @@ def main():
         1. Select your preferred language model
         2. Type your question in the chat box
         3. The system will:
-           - Search for relevant information
-           - Synthesize a comprehensive answer
-        4. View search results in expandable sections
+           - Search for relevant information (with reasoning)
+           - Synthesize a comprehensive answer (with reasoning)
+        4. View search results and thought process in expandable sections
         5. Continue the conversation with follow-up questions
         """)
 
