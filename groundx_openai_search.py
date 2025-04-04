@@ -79,6 +79,7 @@ def main():
         if st.button("Clear Chat"):
             reset_chat()
             st.session_state.pdf_files = []  # Also clear the PDF files list
+
     # Main search interface
     query = st.chat_input("Enter your search query:")
 
@@ -98,11 +99,29 @@ def main():
                     st.text(llm_text)
 
             with st.spinner("Analyzing results with AI..."):
-                # OpenAI analysis
-                instruction = """You are a helpful virtual assistant that answers questions 
-                using the content below. Your task is to create detailed answers to the 
-                questions by combining your understanding of the world with the content 
-                provided below. Do not share links."""
+                # OpenAI analysis with chain of thought reasoning
+                instruction = """You are a helpful virtual assistant that answers questions using the content below. 
+                Follow these steps to provide a detailed answer:
+
+                1. First, analyze the question:
+                   - What are the key concepts and requirements?
+                   - What specific information is needed?
+                   - What type of answer would be most helpful?
+
+                2. Then, analyze the provided content:
+                   - What relevant information was found?
+                   - How does it relate to the question?
+                   - What supporting details are available?
+                   - Are there any gaps in the information?
+
+                3. Finally, synthesize the answer:
+                   - How should the information be structured?
+                   - What main points should be highlighted?
+                   - What supporting details should be included?
+                   - How can the answer be made most clear and helpful?
+
+                Your task is to create detailed answers by combining your understanding of the world with the content provided below. 
+                Do not share links. Show your reasoning process step by step."""
 
                 completion = client.chat.completions.create(
                     model=completion_model,
@@ -112,7 +131,8 @@ def main():
                             "content": f"{instruction}\n===\n{llm_text}\n===",
                         },
                         {"role": "user", "content": query},
-                    ]
+                    ],
+                    temperature=0.7,  # Slightly higher temperature for more detailed reasoning
                 )
 
                 # Display results
@@ -125,9 +145,45 @@ def main():
                 with col2:
                     st.metric("Model Used", completion_model)
 
-                # Display the answer
+                # Display the answer with reasoning
                 st.markdown("### Answer")
-                st.write(completion.choices[0].message.content)
+                
+                # Split the response into reasoning and final answer
+                response_text = completion.choices[0].message.content
+                reasoning_parts = []
+                final_answer = ""
+                
+                # Extract reasoning steps and final answer
+                lines = response_text.split('\n')
+                in_reasoning = False
+                for line in lines:
+                    if line.strip().startswith(('1.', '2.', '3.')) or line.strip().startswith(('- ')):
+                        in_reasoning = True
+                        reasoning_parts.append(line)
+                    elif in_reasoning and line.strip() and not line.strip().startswith(('1.', '2.', '3.', '- ')):
+                        in_reasoning = False
+                        final_answer = line
+                    elif not in_reasoning:
+                        final_answer += '\n' + line
+
+                # Display reasoning in an expander
+                if reasoning_parts:
+                    with st.expander("View Reasoning Process"):
+                        st.markdown('\n'.join(reasoning_parts))
+
+                # Display the final answer
+                st.markdown(final_answer)
+
+                # Store in chat history with metadata
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": final_answer,
+                    "metadata": {
+                        "search_results": llm_text,
+                        "reasoning": '\n'.join(reasoning_parts),
+                        "search_score": results.score
+                    }
+                })
 
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
@@ -139,8 +195,11 @@ def main():
         ### How to use:
         1. Enter your search query in the chat box
         2. The app will search through your documents using GroundX
-        3. The results will be analyzed using OpenAI's language models
-        4. You'll get a detailed response based on the document contents
+        3. The results will be analyzed using OpenAI's language models with chain of thought reasoning
+        4. You'll see:
+           - The reasoning process in an expandable section
+           - A detailed answer based on the document contents
+           - Search metadata and scores
         """)
 
 if __name__ == "__main__":
