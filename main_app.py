@@ -24,6 +24,8 @@ from app_deep_seek_agentic_crewai import main as crewai_main
 from groundx_deepseek_search import main as groundx_main
 from groundx_openai_search import main as groundx_openai_main
 
+# Fix for SQLite version issues with ChromaDB
+os.environ["LANGCHAIN_CHROMA_FORCE_PYSQLITE"] = "1"
 
 __import__('pysqlite3')
 import sys
