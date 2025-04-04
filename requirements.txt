@@ -6,10 +6,15 @@ requests>=2.31.0
 pydantic>=2.0.0,<3.0.0
 
 
+
+
 openai>=1.12.0
 # AI/ML dependencies
 # crewai>=0.11.0
-crewai==0.108.0 
+# crewai==0.108.0 
+crewai>=0.28.0
+chromadb>=0.4.18
+
 # crewai-tools==0.108.0
 crewai-tools==0.38.1
 
@@ -31,7 +36,7 @@ sentence-transformers>=2.2.2
 # Core dependencies
 # ChromaDB and its dependencies with specific versions
 # chromadb==0.4.18  # Try an earlier stable version
-chromadb>=0.5.23
+# chromadb>=0.5.23
 onnxruntime>=1.17.0
 
 # Additional dependencies that might be needed
